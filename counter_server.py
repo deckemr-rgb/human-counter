@@ -28,7 +28,7 @@ import sqlite3
 import threading
 import time
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -47,10 +47,7 @@ DEDUP_IOU = 0.5
 _db_lock = threading.RLock()
 _camera_cache = {"at": 0.0, "sources": []}
 
-DB = sqlite3.connect(DB_PATH, check_same_thread=False)
-DB.row_factory = sqlite3.Row
-DB.executescript(
-    """
+_SCHEMA_SQL = """
     CREATE TABLE IF NOT EXISTS events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       event_key TEXT NOT NULL UNIQUE,
@@ -65,8 +62,10 @@ DB.executescript(
     );
     CREATE INDEX IF NOT EXISTS idx_events_camera ON events(camera_id);
     CREATE INDEX IF NOT EXISTS idx_events_first ON events(first_seen);
-    """
-)
+"""
+DB = sqlite3.connect(DB_PATH, check_same_thread=False)
+DB.row_factory = sqlite3.Row
+DB.executescript(_SCHEMA_SQL)
 DB.commit()
 
 MIME = {
@@ -103,6 +102,20 @@ def iou(a, b):
     area_b = max(0.0, b[2] - b[0]) * max(0.0, b[3] - b[1])
     union = area_a + area_b - inter
     return inter / union if union > 0 else 0.0
+
+
+def today_boundary_utc_iso():
+    """Batas "hari ini" (tengah malam WIB) sebagai ISO UTC — dipakai /api/stats.
+
+    Terpisah sebagai fungsi agar logika batas hari WIB bisa diuji langsung
+    (temuan K2: pencampuran UTC/lokal membuat 00:00-07:00 WIB salah hitung).
+    """
+    now_utc = datetime.now(timezone.utc)
+    wib_date = (now_utc + timedelta(hours=7)).date()
+    return datetime(
+        wib_date.year, wib_date.month, wib_date.day,
+        tzinfo=timezone(timedelta(hours=7)),
+    ).astimezone(timezone.utc).isoformat(timespec="seconds")
 
 
 def find_duplicate(camera_id, bbox, now):
@@ -235,9 +248,13 @@ class CounterHandler(BaseHTTPRequestHandler):
             if path == "/api/stats":
                 with _db_lock:
                     total = DB.execute("SELECT COUNT(*) c FROM events").fetchone()["c"]
+                    # first_seen disimpan UTC; "hari ini" = sejak tengah malam
+                    # WIB (UTC+7, Jakarta tanpa DST).
+                    now_utc = datetime.now(timezone.utc)
+                    wib_date = (now_utc + timedelta(hours=7)).date()
                     today = DB.execute(
-                        "SELECT COUNT(*) c FROM events WHERE first_seen >= date('now','localtime')\n                         OR first_seen >= ?",
-                        (datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0).isoformat(timespec="seconds"),),
+                        "SELECT COUNT(*) c FROM events WHERE first_seen >= ?",
+                        (today_boundary_utc_iso(),),
                     ).fetchone()["c"]
                     hour_ago = datetime.fromtimestamp(time.time() - 3600, timezone.utc).isoformat(timespec="seconds")
                     last_hour = DB.execute(
