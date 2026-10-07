@@ -3,11 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Human Counter — Pencatatan Orang Melewati CCTV</title>
-  <link rel="stylesheet" href="/static/style.css" />
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4/dist/tf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2/dist/coco-ssd.min.js"></script>
+  <title>Human Counter — Lewatan CCTV</title>
+  <link rel="stylesheet" href="/static/style.css?v=4" />
+  <script src="/static/vendor/hls.min.js"></script>
 </head>
 <body>
   <header class="topbar">
@@ -15,34 +13,64 @@
       <span class="brand-mark">🚶</span>
       <div>
         <h1>HUMAN COUNTER</h1>
-        <p>Pencatatan orang melewati CCTV · deteksi real-time di peramban · anti-duplikat dua lapis · tanpa peta</p>
+        <p>Lewatan orang melewati garis CCTV · WIB · tanpa peta</p>
       </div>
     </div>
     <div class="stat-cards">
-      <div class="stat-card accent"><b id="stat-total">0</b><span>TOTAL TERDAFTAR</span></div>
-      <div class="stat-card"><b id="stat-today">0</b><span>HARI INI</span></div>
-      <div class="stat-card"><b id="stat-hour">0</b><span>JAM TERAKHIR</span></div>
-      <div class="stat-card"><b id="stat-cameras">0</b><span>KAMERA AKTIF</span></div>
+      <div class="stat-card accent"><b id="kpi-total">–</b><span>LEWATAN HARI INI</span></div>
+      <div class="stat-card"><b id="kpi-in">–</b><span>MASUK</span></div>
+      <div class="stat-card"><b id="kpi-out">–</b><span>KELUAR</span></div>
+      <div class="stat-card"><b id="kpi-peak">–</b><span>JAM PUNCAK</span></div>
+      <div class="stat-card"><b id="kpi-online">–</b><span>KAMERA ONLINE</span></div>
+      <div class="stat-card"><b id="kpi-cov">–</b><span>CAKUPAN DATA</span></div>
+    </div>
+    <div class="topbar-actions">
+      <input type="date" id="date-picker" />
+      <a class="btn" id="export-btn" href="/api/v1/export.csv?from=2026-10-07" download>⬇ CSV</a>
     </div>
   </header>
 
   <main class="layout">
-    <section class="cameras">
-      <div class="section-title">KAMERA LANGSUNG — setiap orang yang lewat tercatat sekali</div>
+    <section class="main-col">
+      <div class="section-title">LEWATAN PER JAM (HARI TERPILIH)</div>
+      <canvas id="hourly-chart" height="140"></canvas>
+      <div class="section-title">KAMERA LANGSUNG — kotak + garis hitung dari server</div>
       <div id="camera-grid" class="camera-grid"></div>
     </section>
 
     <aside class="side">
-      <div class="section-title">ORANG TERDAFTAR (TERBARU)</div>
-      <ul id="feed" class="feed"></ul>
-      <div class="section-title">LEWATAN PER MENIT (30 MENIT)</div>
-      <canvas id="chart" width="320" height="120"></canvas>
-      <div class="section-title">PER KAMERA</div>
-      <ul id="per-camera" class="per-camera"></ul>
+      <div class="section-title">LEWATAN LIVE (SSE)</div>
+      <ul id="feed" class="feed"><li class="muted">menunggu lewatan…</li></ul>
+      <div class="section-title">PERINGKAT KAMERA</div>
+      <ul id="rank" class="rank"></ul>
+      <div class="section-title">STATUS SISTEM</div>
+      <ul class="sysinfo">
+        <li><span>Sesi ingest</span><b id="sys-session">–</b></li>
+        <li><span>Versi skema</span><b>v1</b></li>
+        <li><span>Zona waktu</span><b>Asia/Jakarta</b></li>
+      </ul>
+      <p class="hint" id="sse-status">SSE: menyambung…</p>
     </aside>
   </main>
 
-  <script src="/static/tracker.js"></script>
-  <script src="/static/app.js"></script>
+  <div id="editor-modal" class="modal" hidden>
+    <div class="modal-box">
+      <div class="modal-head">
+        <b id="editor-title">Editor garis hitung</b>
+        <button id="editor-close" class="btn">✕</button>
+      </div>
+      <div class="modal-stage">
+        <canvas id="editor-canvas"></canvas>
+        <p class="hint">Klik DUA titik pada bingkai untuk membuat garis. Garis lama diganti saat disimpan.</p>
+      </div>
+      <div class="row">
+        <input id="line-name" placeholder="nama garis (mis. zebra-depan)" maxlength="40" />
+        <button id="editor-save" class="btn primary">Simpan garis</button>
+      </div>
+      <p id="editor-status" class="hint"></p>
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=4"></script>
 </body>
 </html>
