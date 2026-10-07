@@ -5,3 +5,5 @@ __pycache__/
 .venv/
 .env
 stream-test.txt
+eval/ground_truth/
+eval/__pycache__/
