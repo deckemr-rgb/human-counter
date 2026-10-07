@@ -13,6 +13,8 @@ const state = {
   editors: {}, // cameraId -> hls instance
   overlayScale: {}, // cameraId -> {sx, sy} fraksi video→tampil
   editor: null, // {cameraId, points: [], video}
+  lastImgFetch: {}, // cameraId -> ts ms (jeda gambar teranotasi)
+  liveMode: new Set(), // kamera yang di-set ke video langsung
 };
 
 /* ---------------- util ---------------- */
@@ -27,6 +29,15 @@ function todayStr(offsetDays = 0) {
   const d = new Date(Date.now() + offsetDays * 86400000);
   return d.toISOString().slice(0, 10);
 }
+
+/* ---------------- putar semua (gestur pengguna) ---------------- */
+$("play-all").addEventListener("click", async () => {
+  let n = 0;
+  for (const v of document.querySelectorAll(".cam-video")) {
+    try { await v.play(); n += 1; } catch { /* lanjut */ }
+  }
+  $("sse-status").textContent = `▶ ${n} video diputar`;
+});
 
 /* ---------------- boot ---------------- */
 window.addEventListener("load", async () => {
@@ -67,6 +78,8 @@ function buildGrid() {
       <div class="cam-stage" id="stage-${esc(cam.id)}">
         <video id="video-${esc(cam.id)}" class="cam-video" muted autoplay playsinline></video>
         <canvas id="overlay-${esc(cam.id)}" class="cam-overlay"></canvas>
+        <img id="annot-${esc(cam.id)}" class="cam-annotated" alt="deteksi teranotasi" />
+        <button class="btn btn-live" data-live="${esc(cam.id)}">LIVE VIDEO</button>
       </div>
       <div class="cam-foot">
         <span class="inout">▲<b id="in-${esc(cam.id)}">0</b> ▼<b id="out-${esc(cam.id)}">0</b></span>
@@ -79,6 +92,20 @@ function buildGrid() {
   grid.addEventListener("click", (event) => {
     const btn = event.target.closest("button[data-cam]");
     if (btn) openEditor(btn.dataset.cam);
+    const live = event.target.closest("button[data-live]");
+    if (live) {
+      const camId = live.dataset.live;
+      const img = $(`annot-${CSS.escape(camId)}`);
+      if (state.liveMode.has(camId)) {
+        state.liveMode.delete(camId);
+        live.textContent = "LIVE VIDEO";
+        if (img) img.hidden = false;
+      } else {
+        state.liveMode.add(camId);
+        live.textContent = "TAMPILAN DETEKSI";
+        if (img) img.hidden = true;
+      }
+    }
   });
 }
 
@@ -118,6 +145,14 @@ async function refreshCameras() {
     if (fpsEl) fpsEl.textContent = `${cam.fps.toFixed(1)} fps · conf ${cam.avgConf.toFixed(2)}`;
     const canvas = $(`overlay-${CSS.escape(cam.id)}`);
     const video = $(`video-${CSS.escape(cam.id)}`);
+    const annot = $(`annot-${CSS.escape(cam.id)}`);
+    const nowMs = Date.now();
+    if (annot && nowMs - (state.lastImgFetch?.[cam.id] || 0) > 4000
+        && !state.liveMode.has(cam.id)) {
+      state.lastImgFetch = state.lastImgFetch || {};
+      state.lastImgFetch[cam.id] = nowMs;
+      annot.src = `/api/v1/annotated/${encodeURIComponent(cam.id)}?t=${nowMs}`;
+    }
     if (video && video.paused && video.readyState >= 2) video.play().catch(() => {});
     if (canvas && video && video.videoWidth) drawOverlay(canvas, video, cam);
   }

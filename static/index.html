@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Human Counter — Lewatan CCTV</title>
-  <link rel="stylesheet" href="/static/style.css?v=4" />
+  <link rel="stylesheet" href="/static/style.css?v=6" />
   <script src="/static/vendor/hls.min.js"></script>
 </head>
 <body>
@@ -25,6 +25,7 @@
       <div class="stat-card"><b id="kpi-cov">–</b><span>CAKUPAN DATA</span></div>
     </div>
     <div class="topbar-actions">
+      <button class="btn" id="play-all">▶ PUTAR SEMUA</button>
       <input type="date" id="date-picker" />
       <a class="btn" id="export-btn" href="/api/v1/export.csv?from=2026-10-07" download>⬇ CSV</a>
     </div>
@@ -71,6 +72,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=4"></script>
+  <script src="/static/app.js?v=10"></script>
 </body>
 </html>

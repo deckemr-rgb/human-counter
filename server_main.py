@@ -275,6 +275,20 @@ def put_lines(camera_id: str, body: LinesIn):
     return {"ok": True, "lines": [dict(r) for r in rows]}
 
 
+@app.get("/api/v1/annotated/{camera_id}")
+def annotated(camera_id: str):
+    """JPEG teranotasi terakhir (kotak + garis + banner) — digambar server,
+    dijamin menampilkan deteksi tanpa bergantung pemutaran video."""
+    w = workers.get(camera_id)
+    if w is None or not w.last_annotated:
+        raise HTTPException(404, "belum ada bingkai teranotasi")
+    return StreamingResponse(
+        iter([w.last_annotated]),
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.get("/api/v1/live")
 async def live():
     q: queue.Queue = queue.Queue()

@@ -46,6 +46,7 @@ class CameraWorker(threading.Thread):
         self.in_count = 0
         self.out_count = 0
         self.latest_boxes = []  # [(track_id, [x,y,w,h], conf)]
+        self.last_annotated = None  # JPEG bytes teranotasi (untuk dashboard)
         self.last_error = ""
 
     def _set_status(self, status):
@@ -145,10 +146,15 @@ class CameraWorker(threading.Thread):
                                 config.HYSTERESIS, config.MIN_DISPLACEMENT,
                                 config.MIN_TRACK_FRAMES,
                             )
-                            for line_id, _name, direction in crossings:
-                                self._register_crossing(line_id, direction, tid, conf)
-                                self.in_count += direction == "in"
-                                self.out_count += direction == "out"
+                    for line_id, _name, direction in crossings:
+                        self._register_crossing(line_id, direction, tid, conf)
+                        self.in_count += direction == "in"
+                        self.out_count += direction == "out"
+                    # JPEG teranotasi untuk dashboard: kotak + ID + garis
+                    # hitung + banner — digambar di SERVER sehingga kotak dan
+                    # garis SELALU terlihat di dashboard tanpa bergantung pada
+                    # pemutaran video peramban (yang rentan hulu flaky).
+                    self.last_annotated = self._make_annotated_jpeg(frame, boxes)
                     self._set_status("online")
             except Exception as exc:
                 self.last_error = str(exc)[:120]
@@ -161,6 +167,31 @@ class CameraWorker(threading.Thread):
                 except Exception:
                     pass
             self.stop_event.wait(max(0.0, config.RECONNECT_MIN_S - (time.time() - started)))
+
+    def _make_annotated_jpeg(self, frame, boxes):
+        """Gambar kotak + ID + garis hitung + banner pada salinan bingkai,
+        kembalikan JPEG bytes (untuk endpoint /api/v1/annotated)."""
+        annotated = frame.copy()
+        frame_h, frame_w = annotated.shape[:2]
+        # garis hitung (kuning)
+        for line in self.lines:
+            p1 = (int(line.p1[0] * frame_w), int(line.p1[1] * frame_h))
+            p2 = (int(line.p2[0] * frame_w), int(line.p2[1] * frame_h))
+            cv2.line(annotated, p1, p2, (0, 209, 255), 2)
+        # kotak + label
+        for tid, box, conf in boxes:
+            x1, y1, x2, y2 = (int(v) for v in box)
+            cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 229, 255), 2)
+            label = f"#{tid} {int(conf * 100)}%"
+            cv2.putText(annotated, label, (x1 + 2, max(12, y1 - 4)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 229, 255), 1)
+        # banner jumlah orang
+        cv2.rectangle(annotated, (0, 0), (230, 34), (37, 99, 235), -1)
+        cv2.putText(annotated, f"Persons: {len(boxes)}", (8, 24),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        small = cv2.resize(annotated, (640, int(640 * frame_h / max(frame_w, 1))))
+        ok, encoded = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, 75])
+        return encoded.tobytes() if ok else None
 
     def _register_crossing(self, line_id, direction, track_id, conf):
         line = next((l for l in self.lines if l.line_id == line_id), None)
